@@ -1,0 +1,44 @@
+# --- Secrets: never commit (public repo) ---
+.env
+.env.*
+!.env.example
+!.env.local.example
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.local.example
+*.pem
+*.key
+secrets.json
+
+# --- Dependencies ---
+node_modules
+**/node_modules
+
+# --- Build output ---
+**/dist
+**/.next
+**/out
+**/cache
+**/artifacts
+**/typechain-types
+*.tsbuildinfo
+
+# --- Local chain / deploy artifacts (public addresses live in HANDOFF.md) ---
+**/deployments.json
+**/deployments.dex.json
+web/lib/addresses.*.json
+web/lib/dex.*.json
+
+# --- Backend data ---
+backend/data
+*.db
+*.db-journal
+
+# --- Coverage ---
+coverage
+coverage.json
+
+# --- OS ---
+.DS_Store
+Thumbs.db

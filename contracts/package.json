@@ -1,0 +1,32 @@
+{
+  "name": "pumpclone-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "pump.fun-style launchpad + PumpSwap AMM for Robinhood Chain",
+  "scripts": {
+    "build": "hardhat compile",
+    "test": "hardhat test",
+    "node": "hardhat node",
+    "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
+    "deploy:testnet": "hardhat run scripts/deploy.ts --network robinhoodTestnet",
+    "deploy:mainnet": "hardhat run scripts/deploy.ts --network robinhood",
+    "deploy:dex:local": "hardhat run scripts/deployDex.ts --network localhost",
+    "deploy:dex:testnet": "hardhat run scripts/deployDex.ts --network robinhoodTestnet",
+    "deploy:dex:mainnet": "hardhat run scripts/deployDex.ts --network robinhood",
+    "seed:local": "hardhat run scripts/seed.ts --network localhost",
+    "buyback:local": "hardhat run scripts/buyback.ts --network localhost",
+    "buyback:testnet": "hardhat run scripts/buyback.ts --network robinhoodTestnet",
+    "buyback:mainnet": "hardhat run scripts/buyback.ts --network robinhood"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.10",
+    "typescript": "^5.5.4",
+    "ts-node": "^10.9.2",
+    "@types/node": "^20.14.0",
+    "dotenv": "^16.4.5"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.2"
+  }
+}
