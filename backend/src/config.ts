@@ -74,11 +74,12 @@ export const config = {
   },
 } as const;
 
-export type CandleInterval = "1m" | "5m" | "1h";
-export const CANDLE_INTERVALS: CandleInterval[] = ["1m", "5m", "1h"];
+export type CandleInterval = "1m" | "5m" | "15m" | "1h";
+export const CANDLE_INTERVALS: CandleInterval[] = ["1m", "5m", "15m", "1h"];
 
 export const INTERVAL_SECONDS: Record<CandleInterval, number> = {
   "1m": 60,
   "5m": 300,
+  "15m": 900,
   "1h": 3600,
 };

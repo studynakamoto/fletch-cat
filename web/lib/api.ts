@@ -31,6 +31,7 @@ export interface ApiTokenDetail extends ApiTokenListItem {
   website: string;
   reserveEth: number;
   reserveToken: number;
+  totalSupply: string;
   holdersCount: number;
 }
 
@@ -39,7 +40,7 @@ export interface ApiTrade {
   txHash: string;
   blockNumber: number;
   timestamp: number;
-  type: string; // "buy" | "sell" | "swap_buy" | "swap_sell"
+  type: string; // "buy" | "sell" | "swap_buy" | "swap_sell" | "swap" (legacy)
   trader: string;
   ethAmount: number;
   tokenAmount: number;
@@ -56,7 +57,7 @@ export interface ApiCandle {
   volume: number;
 }
 
-export type CandleInterval = "1m" | "5m" | "1h";
+export type CandleInterval = "1m" | "5m" | "15m" | "1h";
 
 async function getJson<T>(path: string): Promise<T | null> {
   if (!hasApi) return null;

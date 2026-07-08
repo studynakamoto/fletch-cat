@@ -4,7 +4,7 @@ import path from "node:path";
 import { config, type CandleInterval } from "./config.js";
 import { formatAddress } from "./utils.js";
 
-export type TradeType = "buy" | "sell" | "swap";
+export type TradeType = "buy" | "sell" | "swap_buy" | "swap_sell";
 
 export interface TokenRow {
   address: string;

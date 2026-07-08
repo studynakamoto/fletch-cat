@@ -65,9 +65,14 @@ export async function tokenRoutes(app: FastifyInstance): Promise<void> {
       return reply.status(400).send({ error: "Invalid token address" });
     }
 
-    const intervalRaw = request.query.interval ?? "1m";
+    const intervalRaw = request.query.interval ?? "5m";
     const interval: CandleInterval =
-      intervalRaw === "5m" || intervalRaw === "1h" ? intervalRaw : "1m";
+      intervalRaw === "1m" ||
+      intervalRaw === "5m" ||
+      intervalRaw === "15m" ||
+      intervalRaw === "1h"
+        ? intervalRaw
+        : "5m";
     const limit = Math.min(
       Math.max(Number.parseInt(request.query.limit ?? "500", 10) || 500, 1),
       2000,

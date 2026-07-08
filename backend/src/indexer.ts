@@ -24,6 +24,7 @@ import {
   updateHolderBalance,
   updateTokenState,
   upsertToken,
+  type TradeType,
 } from "./db.js";
 import { pairPriceEth, sleep, tradeId, tradePriceEth } from "./utils.js";
 
@@ -215,7 +216,7 @@ async function processPairCreatedLogs(logs: Log[]): Promise<void> {
 async function recordTrade(params: {
   log: Log;
   tokenAddress: string;
-  tradeType: "buy" | "sell" | "swap";
+  tradeType: TradeType;
   traderAddress: string;
   ethAmount: bigint;
   tokenAmount: bigint;
@@ -246,10 +247,8 @@ async function recordTrade(params: {
   updateCandlesFromTrade(tokenAddress, timestamp, priceEth, ethAmount);
   updateTokenState(tokenAddress, { priceEth });
 
-  if (tradeType === "buy") {
+  if (tradeType === "buy" || tradeType === "swap_buy") {
     updateHolderBalance(tokenAddress, traderAddress, tokenAmount);
-  } else if (tradeType === "sell" || (tradeType === "swap" && tokenAmount > 0n)) {
-    // swap ethIn=true: trader receives tokens; ethIn=false: trader sends tokens
   }
 }
 
@@ -352,7 +351,7 @@ async function processSwapLogs(logs: Log[]): Promise<void> {
       await recordTrade({
         log,
         tokenAddress,
-        tradeType: "swap",
+        tradeType: ethIn ? "swap_buy" : "swap_sell",
         traderAddress: trader,
         ethAmount,
         tokenAmount,

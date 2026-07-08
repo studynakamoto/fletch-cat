@@ -115,8 +115,8 @@ export default function TokenPage() {
             )}
           </div>
 
-          {hasApi && <PriceChart token={token} />}
-          {hasApi && <TradeHistory token={token} symbol={t.symbol} />}
+          {hasApi && <PriceChart token={token} symbol={t.symbol} />}
+          {hasApi && <TradeHistory token={token} symbol={t.symbol} creator={t.creator} />}
 
           <div className="card p-4 text-xs text-white/50 space-y-1">
             <div>Token: <a className="text-pump-accent" href={`${activeChain.blockExplorers?.default.url}/address/${t.token}`} target="_blank" rel="noreferrer">{shortAddr(t.token)}</a></div>
