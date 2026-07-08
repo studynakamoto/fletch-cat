@@ -24,7 +24,7 @@ pumpclone/
   backend/     Fastify API + on-chain indexer
 ```
 
-**Docs:** [TOKENOMICS.md](./TOKENOMICS.md) · [HANDOFF.md](./HANDOFF.md) · [DEPLOY.md](./DEPLOY.md)
+**Docs:** [CONTRACTS.md](./CONTRACTS.md) (how the launchpad works — start here) · [TOKENOMICS.md](./TOKENOMICS.md) · [HANDOFF.md](./HANDOFF.md) · [DEPLOY.md](./DEPLOY.md)
 
 ## How the bonding curve works
 
