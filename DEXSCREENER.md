@@ -76,22 +76,27 @@ are invisible to aggregators.
 
 ## Paste-ready application (Discord → listing request)
 
-> **DEX listing request — FletchSwap (Robinhood Chain)**
+> **Launchpad + DEX listing request — FletchPad / FletchSwap (Robinhood Chain)**
 >
 > - **Chain:** Robinhood Chain (chainId 4663 — already supported as `robinhood`)
-> - **DEX:** FletchSwap — Uniswap v2-compatible AMM (factory + router fork,
->   standard v2 events)
-> - **Factory:** `<address after dex deploy>`
-> - **Router:** `<address after dex deploy>`
-> - **Launchpad:** FletchPad (pump.fun-style bonding curves that graduate into
->   FletchSwap pools with burned LP) — we'd love launchpad attribution like
->   pumpfun/moonshot get on Solana
+> - **Launchpad:** FletchPad — pump.fun-style bonding curves, live on mainnet:
+>   `LaunchpadFactory 0x345f727b2C919789C991d96865505BD654d1F8F0`
+>   (`TokenCreated` / `Buy` / `Sell` / `Graduated` events). Graduations seed
+>   liquidity pools with **LP burned to 0xdead**. We'd love launchpad
+>   attribution like pumpfun/moonshot get on Solana.
+> - **DEX (FletchSwap):** live mainnet AMM factory
+>   `0x4B167BE628c8Bfb60FCEE215a9f3A68FC6f500B9` (ETH/token pairs, 0.30% fee);
+>   a Uniswap v2-compatible factory+router fork ships next (standard v2
+>   events) — addresses will follow in this thread once deployed.
+> - **V2 pipeline:** new `LaunchpadFactoryV2` graduates tokens straight into
+>   canonical Uniswap v2 pools on RH Chain, so graduated pairs chart on
+>   DEXScreener automatically.
 > - **Website:** https://fletch.cat
 > - **Source (public):** https://github.com/studynakamoto/fletch-cat
-> - **Contracts verified on Blockscout:** yes (robinhoodchain.blockscout.com)
+> - **Explorer:** robinhoodchain.blockscout.com
 > - **Flagship pair already charting on your platform:**
 >   https://dexscreener.com/robinhood/0x616936b685b5fca6fafb7c795ab97b8edad38ee5
-> - **Contact:** max@soul.bond / @<telegram>
+> - **Contact:** max@soul.bond
 
 ## Reality check
 
