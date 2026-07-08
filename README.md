@@ -21,7 +21,10 @@ A pump.fun-style token launchpad **plus its own PumpSwap AMM**, targeting
 pumpclone/
   contracts/   Hardhat project (Solidity 0.8.24, OpenZeppelin 5)
   web/         Next.js 14 app (App Router)
+  backend/     Fastify API + on-chain indexer
 ```
+
+**Docs:** [TOKENOMICS.md](./TOKENOMICS.md) · [HANDOFF.md](./HANDOFF.md) · [DEPLOY.md](./DEPLOY.md)
 
 ## How the bonding curve works
 
