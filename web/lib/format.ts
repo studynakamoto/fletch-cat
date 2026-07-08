@@ -22,3 +22,7 @@ export function shortAddr(addr?: string): string {
   if (!addr) return "";
   return addr.slice(0, 6) + "…" + addr.slice(-4);
 }
+
+export function isImageSrc(s: string): boolean {
+  return s.startsWith("http://") || s.startsWith("https://") || s.startsWith("/");
+}

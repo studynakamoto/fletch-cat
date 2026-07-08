@@ -9,12 +9,8 @@ import { TradePanel } from "@/components/TradePanel";
 import { PriceChart } from "@/components/PriceChart";
 import { TradeHistory } from "@/components/TradeHistory";
 import { fmtUsd, hasApi, useApiToken } from "@/lib/api";
-import { fmtEth, fmtTokens, shortAddr } from "@/lib/format";
+import { fmtEth, fmtTokens, isImageSrc, shortAddr } from "@/lib/format";
 import type { TokenInfo } from "@/components/TokenCard";
-
-function isUrl(s: string) {
-  return s.startsWith("http://") || s.startsWith("https://");
-}
 
 export default function TokenPage() {
   const params = useParams();
@@ -75,7 +71,7 @@ export default function TokenPage() {
         <div className="lg:col-span-2 space-y-4">
           <div className="card p-5 flex gap-4">
             <div className="w-20 h-20 rounded-xl bg-pump-bg border border-pump-border flex items-center justify-center text-4xl overflow-hidden shrink-0">
-              {isUrl(t.image) ? (
+              {isImageSrc(t.image) ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={t.image} alt={t.symbol} className="w-full h-full object-cover" />
               ) : (

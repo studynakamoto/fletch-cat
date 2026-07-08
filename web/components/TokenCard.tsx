@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useReadContracts } from "wagmi";
 import { bondingCurveAbi } from "@/lib/abis";
 import { fmtUsd, type ApiTokenListItem } from "@/lib/api";
-import { fmtEth, shortAddr } from "@/lib/format";
+import { fmtEth, isImageSrc, shortAddr } from "@/lib/format";
 
 export type TokenInfo = {
   token: `0x${string}`;
@@ -19,10 +19,6 @@ export type TokenInfo = {
   creator: `0x${string}`;
   createdAt: bigint;
 };
-
-function isUrl(s: string) {
-  return s.startsWith("http://") || s.startsWith("https://");
-}
 
 export function TokenCard({ info, stats }: { info: TokenInfo; stats?: ApiTokenListItem }) {
   const { data } = useReadContracts({
@@ -42,7 +38,7 @@ export function TokenCard({ info, stats }: { info: TokenInfo; stats?: ApiTokenLi
     <Link href={`/token/${info.token}`} className="card p-4 hover:border-pump-accent transition-colors block">
       <div className="flex gap-3">
         <div className="w-14 h-14 rounded-lg bg-pump-bg border border-pump-border flex items-center justify-center text-2xl overflow-hidden shrink-0">
-          {isUrl(info.image) ? (
+          {isImageSrc(info.image) ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={info.image} alt={info.symbol} className="w-full h-full object-cover" />
           ) : (

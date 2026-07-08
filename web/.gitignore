@@ -1,5 +1,7 @@
 node_modules
 .next
+public/uploads/*
+!public/uploads/.gitkeep
 out
 .env.local
 .env*.local
