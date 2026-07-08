@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { formatEther, parseEther } from "viem";
 import {
   useAccount,
   useBalance,
   useReadContract,
   useWaitForTransactionReceipt,
+  useWatchContractEvent,
   useWriteContract,
 } from "wagmi";
 import {
@@ -204,6 +205,52 @@ function parseAmount(a: string): bigint {
   }
 }
 
+/** Reads ERC20 allowance and keeps it fresh after approve txs. */
+function useTokenAllowance(
+  token: `0x${string}`,
+  owner: `0x${string}` | undefined,
+  spender: `0x${string}` | undefined,
+  enabled: boolean,
+  txHash: `0x${string}` | undefined,
+): bigint {
+  const active = !!owner && !!spender && enabled;
+
+  const { data, refetch } = useReadContract({
+    address: token,
+    abi: erc20Abi,
+    functionName: "allowance",
+    args: owner && spender ? [owner, spender] : undefined,
+    query: { enabled: active, staleTime: 0 },
+  });
+
+  const { isSuccess: txConfirmed } = useWaitForTransactionReceipt({ hash: txHash });
+
+  useWatchContractEvent({
+    address: active ? token : undefined,
+    abi: erc20Abi,
+    eventName: "Approval",
+    args: active && owner && spender ? { owner, spender } : undefined,
+    onLogs: () => {
+      void refetch();
+    },
+  });
+
+  // RPC nodes can lag one block behind receipt confirmation — poll briefly.
+  useEffect(() => {
+    if (!txConfirmed || !txHash) return;
+    void refetch();
+    const delays = [400, 1200, 3000];
+    const timers = delays.map((ms) => window.setTimeout(() => void refetch(), ms));
+    return () => timers.forEach((t) => window.clearTimeout(t));
+  }, [txConfirmed, txHash, refetch]);
+
+  useEffect(() => {
+    if (active) void refetch();
+  }, [active, refetch]);
+
+  return (data as bigint) ?? 0n;
+}
+
 // ---------------------------------------------------------------- curve
 
 function CurveTrade({
@@ -258,15 +305,15 @@ function CurveTrade({
     query: { enabled: side === "sell" && wei > 0n },
   });
 
-  const { data: allowance } = useReadContract({
-    address: token,
-    abi: erc20Abi,
-    functionName: "allowance",
-    args: owner ? [owner, curve] : undefined,
-    query: { enabled: !!owner && side === "sell" },
-  });
+  const allowance = useTokenAllowance(
+    token,
+    owner,
+    curve,
+    side === "sell",
+    hash,
+  );
 
-  const needsApproval = side === "sell" && wei > 0n && ((allowance as bigint) ?? 0n) < wei;
+  const needsApproval = side === "sell" && wei > 0n && allowance < wei;
 
   const tokensOut = buyQuote ? (buyQuote as [bigint, bigint])[0] : 0n;
   const ethOut = (sellQuote as bigint) ?? 0n;
@@ -448,13 +495,13 @@ function AmmTrade({
   });
 
   const spender = useV2 ? DEX_ROUTER : pairAddr;
-  const { data: allowance } = useReadContract({
-    address: token,
-    abi: erc20Abi,
-    functionName: "allowance",
-    args: owner && spender ? [owner, spender] : undefined,
-    query: { enabled: !!owner && !!spender && side === "sell" },
-  });
+  const allowance = useTokenAllowance(
+    token,
+    owner,
+    spender,
+    side === "sell" && !!spender,
+    hash,
+  );
 
   const quote = useMemo(() => {
     if (wei === 0n) return 0n;
@@ -469,7 +516,7 @@ function AmmTrade({
     return (feeIn * rEth) / (rTok * 1000n + feeIn);
   }, [reserves, v2Amounts, useV2, wei, side]);
 
-  const needsApproval = side === "sell" && wei > 0n && ((allowance as bigint) ?? 0n) < wei;
+  const needsApproval = side === "sell" && wei > 0n && allowance < wei;
 
   function fillMax() {
     if (side === "buy") {

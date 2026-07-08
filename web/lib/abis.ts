@@ -206,6 +206,15 @@ export const erc20Abi = [
     outputs: [{ name: "", type: "bool" }],
   },
   {
+    type: "event",
+    name: "Approval",
+    inputs: [
+      { name: "owner", type: "address", indexed: true },
+      { name: "spender", type: "address", indexed: true },
+      { name: "value", type: "uint256", indexed: false },
+    ],
+  },
+  {
     type: "function",
     name: "symbol",
     stateMutability: "view",
