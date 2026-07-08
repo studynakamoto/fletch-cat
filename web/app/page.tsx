@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useReadContract } from "wagmi";
 import { launchpadFactoryAbi } from "@/lib/abis";
 import { LAUNCHPAD_FACTORY, hasPlatformToken } from "@/lib/config";
 import { TokenCard, type TokenInfo } from "@/components/TokenCard";
 import { CreateTokenModal } from "@/components/CreateTokenModal";
 import { PlatformHero } from "@/components/PlatformHero";
+import { useApiTokens, type ApiTokenListItem } from "@/lib/api";
 
 export default function Home() {
   const [showCreate, setShowCreate] = useState(false);
@@ -19,6 +20,14 @@ export default function Home() {
     query: { refetchInterval: 8000 },
   });
 
+  // USD stats from the indexer (optional; board works without it)
+  const { data: apiData } = useApiTokens("new");
+  const apiStats = useMemo(() => {
+    const map = new Map<string, ApiTokenListItem>();
+    for (const t of apiData?.tokens ?? []) map.set(t.address.toLowerCase(), t);
+    return map;
+  }, [apiData]);
+
   const tokens = (data as TokenInfo[] | undefined) ?? [];
   const configured = LAUNCHPAD_FACTORY !== "0x0000000000000000000000000000000000000000";
 
@@ -28,9 +37,11 @@ export default function Home() {
 
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-bold">Launch. Pump. Graduate.</h1>
+          <h1 className="text-3xl font-bold">
+            FletchPad <span className="text-white/40 font-normal">— Launch. Pump. Graduate.</span>
+          </h1>
           <p className="text-white/60 mt-1">
-            Fair-launch tokens on a bonding curve. Steal the pump — graduate to PumpSwap.
+            Fair-launch tokens on a bonding curve. Steal the pump — graduate to FletchSwap.
           </p>
         </div>
         <button className="btn-green whitespace-nowrap" onClick={() => setShowCreate(true)}>
@@ -54,7 +65,7 @@ export default function Home() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {tokens.map((t) => (
-            <TokenCard key={t.token} info={t} />
+            <TokenCard key={t.token} info={t} stats={apiStats.get(t.token.toLowerCase())} />
           ))}
         </div>
       )}

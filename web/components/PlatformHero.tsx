@@ -62,11 +62,13 @@ export function PlatformHero() {
 
   function buy() {
     if (!address) return;
+    // 1.5% slippage tolerance on the estimated output
+    const minOut = (estOut * 9850n) / 10000n;
     writeContract({
       address: PLATFORM_PAIR,
       abi: pumpSwapPairAbi,
       functionName: "swapExactETHForTokens",
-      args: [0n, address],
+      args: [minOut, address],
       value: wei,
     });
   }
@@ -88,7 +90,7 @@ export function PlatformHero() {
               Fletch Cat <span className="text-pump-green">${symbol}</span>
             </h2>
             <p className="text-white/70 mt-2 max-w-xl">
-              99.9% treasury-controlled, 0.1% floating in PumpSwap. Launchpad fees accumulate in the
+              99.9% treasury-controlled, 0.1% floating on FletchSwap. FletchPad fees accumulate in the
               treasury — used to <span className="text-pump-green font-semibold">buy back &amp; burn</span>{" "}
               ${symbol} on demand.
             </p>

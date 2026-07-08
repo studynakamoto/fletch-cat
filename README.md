@@ -1,15 +1,21 @@
-# PumpClone 🚀
+# fletch.cat — FletchPad + FletchSwap 🚀
 
-A pump.fun-style token launchpad **plus its own PumpSwap AMM**, targeting
-**Robinhood Chain** (EVM, Arbitrum Orbit L2 — mainnet `4663`, testnet `46630`).
+A pump.fun-style token launchpad (**FletchPad**) **plus its own AMM
+(FletchSwap)**, on **Robinhood Chain** (EVM, Arbitrum Orbit L2 — mainnet
+`4663`, testnet `46630`).
 
-- **Launchpad** — anyone creates a fixed-supply ERC20 that trades on a
+> **Naming:** product names are **FletchPad** (launchpad) and **FletchSwap**
+> (AMM/DEX). The Solidity contracts keep their original `Launchpad*` /
+> `PumpSwap*` names — those are already deployed on mainnet.
+
+- **FletchPad** — anyone creates a fixed-supply ERC20 that trades on a
   constant-product **bonding curve**.
 - **Graduation** — once the whole sale allocation is bought, the curve takes a
-  platform fee, seeds a **PumpSwap** ETH/token pool with the raised ETH +
+  platform fee, seeds a **FletchSwap** ETH/token pool with the raised ETH +
   reserved tokens, and **locks the LP forever**.
-- **PumpSwap** — a minimal Uniswap-v2-style constant-product AMM (ETH ⇄ token,
-  0.30% fee to LPs) that we own.
+- **FletchSwap** — a minimal Uniswap-v2-style constant-product AMM (ETH ⇄ token,
+  0.30% fee to LPs) that we own, with a full Uniswap v2 router/factory clone in
+  `contracts/src/dex` for token⇄token routing.
 - **Flagship token + buyback flywheel** — **Fletch Cat** (`$FLETCH`) launched
   with **99.9% held by the treasury** and **0.1% floating** in a PumpSwap pool.
   Launchpad graduation fees accumulate in the **treasury wallet**; you run manual
@@ -172,11 +178,18 @@ Tune the flagship launch via env: `PLATFORM_NAME`, `PLATFORM_SYMBOL`, `PLATFORM_
 Point fees at a different wallet with `FEE_RECIPIENT` at deploy time, or call
 `setFeeRecipient` on the launchpad factory later.
 
-## MVP notes / next steps
+## Status / next steps
 
-- Slippage is set to `0` (min-out) in the UI — add slippage controls before mainnet.
-- No price chart yet (progress bar only) — wire an indexer/subgraph on the
-  `Buy`/`Sell`/`Swap` events.
-- Curve trades have no per-trade fee; the platform fee is taken once at
+- ✅ **Slippage controls** — presets + custom in the trade panel; real min-out
+  on curve buys/sells and FletchSwap swaps.
+- ✅ **Price charts + trade history** — candlesticks (1m/5m/1h), recent trades,
+  USD stats, fed by the `backend/` indexer. Set `NEXT_PUBLIC_API_URL` in the
+  web env to enable (site degrades gracefully without it).
+- ✅ **/swap page** — FletchSwap UI for any graduated token.
+- ⬜ Deploy the backend (Docker — see `backend/README.md`) and set
+  `NEXT_PUBLIC_API_URL` in Vercel.
+- ⬜ Deploy the Uniswap v2 clone to mainnet + DEXScreener listing — see
+  [DEXSCREENER.md](./DEXSCREENER.md).
+- ⬜ Curve trades have no per-trade fee; the platform fee is taken once at
   graduation. Add a trade fee if desired.
-- Contracts are unaudited. **Do not deploy to mainnet with real value without an audit.**
+- ⬜ Contracts are unaudited. **Do not scale real value without an audit.**

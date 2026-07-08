@@ -4,6 +4,10 @@ Onboarding doc for anyone touching `contracts/` or integrating against it
 (frontend/backend). Basics only — see [README.md](./README.md) for run
 commands and [HANDOFF.md](./HANDOFF.md) for live addresses/env.
 
+> **Naming:** product names are **FletchPad** (the launchpad) and
+> **FletchSwap** (the AMM). On-chain the contracts are named `Launchpad*` and
+> `PumpSwap*` — same thing, deployed before the rebrand.
+
 ## Big picture
 
 ```

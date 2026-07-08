@@ -95,6 +95,39 @@ CORS is enabled for all origins.
 
 Trades are stored idempotently by `txHash:logIndex`. Candles are derived on insert.
 
+## Deploying (Docker — Railway / Fly.io / any VPS)
+
+The backend needs a **persistent disk** for SQLite, so serverless hosts (Vercel,
+Lambda) won't work. The included `Dockerfile` runs the API and the `--watch`
+indexer in one container.
+
+```bash
+docker build -t fletch-backend .
+docker run -p 3001:3001 -v fletch-data:/data --env-file .env -e DATABASE_PATH=/data/indexer.db fletch-backend
+```
+
+**Railway:** New Project → Deploy from GitHub repo → set root directory to
+`backend/` (it auto-detects the Dockerfile) → add a **Volume** mounted at
+`/data` → set the env vars from `.env.example` with `DATABASE_PATH=/data/indexer.db`.
+
+**Fly.io:** `fly launch --no-deploy` in `backend/`, then
+`fly volumes create fletch_data --size 1`, add to `fly.toml`:
+
+```toml
+[mounts]
+  source = "fletch_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 3001
+```
+
+then `fly secrets set` the env vars and `fly deploy`.
+
+After it's live, set `NEXT_PUBLIC_API_URL=https://<your-backend-host>` in the
+web app's Vercel env and redeploy — the site picks up charts, trade history,
+and USD stats automatically.
+
 ## Project Structure
 
 ```

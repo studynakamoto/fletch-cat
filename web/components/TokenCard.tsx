@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useReadContracts } from "wagmi";
 import { bondingCurveAbi } from "@/lib/abis";
+import { fmtUsd, type ApiTokenListItem } from "@/lib/api";
 import { fmtEth, shortAddr } from "@/lib/format";
 
 export type TokenInfo = {
@@ -23,7 +24,7 @@ function isUrl(s: string) {
   return s.startsWith("http://") || s.startsWith("https://");
 }
 
-export function TokenCard({ info }: { info: TokenInfo }) {
+export function TokenCard({ info, stats }: { info: TokenInfo; stats?: ApiTokenListItem }) {
   const { data } = useReadContracts({
     contracts: [
       { address: info.curve, abi: bondingCurveAbi, functionName: "ethReserve" },
@@ -56,6 +57,17 @@ export function TokenCard({ info }: { info: TokenInfo }) {
           <p className="text-sm text-white/70 line-clamp-2 mt-1">{info.description}</p>
         </div>
       </div>
+
+      {stats && (
+        <div className="flex gap-4 mt-3 text-xs text-white/60">
+          <span>
+            MC <span className="text-white font-semibold">{fmtUsd(stats.marketCapUsd)}</span>
+          </span>
+          <span>
+            24h vol <span className="text-white font-semibold">{fmtUsd(stats.volume24hUsd)}</span>
+          </span>
+        </div>
+      )}
 
       <div className="mt-3">
         <div className="flex justify-between text-xs text-white/60 mb-1">

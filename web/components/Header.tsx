@@ -17,7 +17,15 @@ export function Header() {
             <span className="text-[10px] text-white/40 uppercase tracking-wider">Robinhood Chain</span>
           </div>
         </Link>
-        <ConnectButton showBalance={false} />
+        <nav className="flex items-center gap-4 text-sm">
+          <Link href="/" className="text-white/70 hover:text-white">
+            FletchPad
+          </Link>
+          <Link href="/swap" className="text-white/70 hover:text-white">
+            FletchSwap
+          </Link>
+          <ConnectButton showBalance={false} />
+        </nav>
       </div>
     </header>
   );

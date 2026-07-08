@@ -50,8 +50,15 @@ Points at the same addresses; `ETH_USD` stubs the ETH price for USD math.
 - The FLETCH token was deployed directly (not via the launchpad), so the indexer
   seeds it from `PLATFORM_TOKEN`/`PLATFORM_PAIR`. New launchpad tokens are picked
   up automatically via `TokenCreated` events.
+- **Branding:** product names are **FletchPad** (launchpad) and **FletchSwap**
+  (AMM); on-chain contract names remain `Launchpad*`/`PumpSwap*`.
+- ✅ Slippage controls are live in the UI (curve + AMM + hero).
+- ✅ Charts/trades/USD stats ship with the site once `NEXT_PUBLIC_API_URL`
+  points at a deployed backend (`backend/README.md` has the Docker runbook).
+- $FLETCH already charts on DEXScreener via the Uniswap v2 pair — full DEX
+  listing plan in `DEXSCREENER.md`.
 - Our Uniswap v2 clone (`contracts/src/dex`) is built + tested but **not yet
   deployed** — deploy with `WETH_ADDRESS=0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73 npm run deploy:dex:mainnet`.
-- Contracts are **unaudited**. Add slippage controls in the UI before scaling.
-- See `README.md`, `DEPLOY.md`, `FLETCH_CAT.md` for deeper docs.
+- Contracts are **unaudited**.
+- See `README.md`, `CONTRACTS.md`, `DEPLOY.md`, `FLETCH_CAT.md`, `TOKENOMICS.md` for deeper docs.
 ```

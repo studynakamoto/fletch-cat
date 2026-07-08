@@ -4,8 +4,9 @@ import { Providers } from "./providers";
 import { Header } from "@/components/Header";
 
 export const metadata: Metadata = {
-  title: "fletch.cat — launch tokens on Robinhood Chain",
-  description: "The hood cat's launchpad. Fair-launch tokens on a bonding curve, graduate to PumpSwap.",
+  title: "fletch.cat — FletchPad launchpad on Robinhood Chain",
+  description:
+    "FletchPad: fair-launch tokens on a bonding curve, graduate to FletchSwap. The hood cat's launchpad on Robinhood Chain.",
   metadataBase: new URL("https://fletch.cat"),
   icons: {
     icon: "/logo.png",

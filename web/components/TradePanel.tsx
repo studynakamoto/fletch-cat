@@ -1,11 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { formatEther, parseEther } from "viem";
+import { parseEther } from "viem";
 import {
   useAccount,
   useReadContract,
-  useReadContracts,
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
@@ -14,6 +13,16 @@ import { PUMPSWAP_FACTORY } from "@/lib/config";
 import { fmtEth, fmtTokens } from "@/lib/format";
 
 const MAX_UINT = (2n ** 256n - 1n) as bigint;
+
+const SLIPPAGE_PRESETS = [0.5, 1, 2];
+const DEFAULT_SLIPPAGE = 1;
+
+/** quote minus slippage tolerance (slippagePct e.g. 1 = 1%) */
+function applySlippage(quote: bigint, slippagePct: number): bigint {
+  const bps = BigInt(Math.round(slippagePct * 100));
+  if (bps >= 10000n) return 0n;
+  return (quote * (10000n - bps)) / 10000n;
+}
 
 export function TradePanel({
   token,
@@ -29,6 +38,7 @@ export function TradePanel({
   const { address } = useAccount();
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
+  const [slippage, setSlippage] = useState(DEFAULT_SLIPPAGE);
 
   return (
     <div className="card p-4">
@@ -48,10 +58,77 @@ export function TradePanel({
       </div>
 
       {graduated ? (
-        <AmmTrade token={token} symbol={symbol} side={side} amount={amount} setAmount={setAmount} owner={address} />
+        <AmmTrade
+          token={token}
+          symbol={symbol}
+          side={side}
+          amount={amount}
+          setAmount={setAmount}
+          slippage={slippage}
+          owner={address}
+        />
       ) : (
-        <CurveTrade token={token} curve={curve} symbol={symbol} side={side} amount={amount} setAmount={setAmount} owner={address} />
+        <CurveTrade
+          token={token}
+          curve={curve}
+          symbol={symbol}
+          side={side}
+          amount={amount}
+          setAmount={setAmount}
+          slippage={slippage}
+          owner={address}
+        />
       )}
+
+      <SlippageControl slippage={slippage} setSlippage={setSlippage} />
+    </div>
+  );
+}
+
+function SlippageControl({
+  slippage,
+  setSlippage,
+}: {
+  slippage: number;
+  setSlippage: (v: number) => void;
+}) {
+  const [custom, setCustom] = useState("");
+
+  function pickCustom(v: string) {
+    setCustom(v);
+    const n = Number(v);
+    if (Number.isFinite(n) && n > 0 && n < 50) setSlippage(n);
+  }
+
+  return (
+    <div className="flex items-center gap-2 mt-3 pt-3 border-t border-pump-border/50 text-xs">
+      <span className="text-white/50">Slippage</span>
+      {SLIPPAGE_PRESETS.map((p) => (
+        <button
+          key={p}
+          onClick={() => {
+            setSlippage(p);
+            setCustom("");
+          }}
+          className={`px-2 py-0.5 rounded ${
+            slippage === p && custom === ""
+              ? "bg-pump-green text-black font-semibold"
+              : "bg-pump-bg text-white/60"
+          }`}
+        >
+          {p}%
+        </button>
+      ))}
+      <div className="relative w-16">
+        <input
+          className="input py-0.5 px-2 text-xs pr-5"
+          placeholder="…"
+          inputMode="decimal"
+          value={custom}
+          onChange={(e) => pickCustom(e.target.value)}
+        />
+        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40">%</span>
+      </div>
     </div>
   );
 }
@@ -97,6 +174,7 @@ function CurveTrade({
   side,
   amount,
   setAmount,
+  slippage,
   owner,
 }: {
   token: `0x${string}`;
@@ -105,6 +183,7 @@ function CurveTrade({
   side: "buy" | "sell";
   amount: string;
   setAmount: (v: string) => void;
+  slippage: number;
   owner?: `0x${string}`;
 }) {
   const wei = parseAmount(amount);
@@ -137,6 +216,9 @@ function CurveTrade({
 
   const needsApproval = side === "sell" && wei > 0n && ((allowance as bigint) ?? 0n) < wei;
 
+  const tokensOut = buyQuote ? (buyQuote as [bigint, bigint])[0] : 0n;
+  const ethOut = (sellQuote as bigint) ?? 0n;
+
   function act() {
     if (!owner) return;
     if (side === "buy") {
@@ -144,7 +226,7 @@ function CurveTrade({
         address: curve,
         abi: bondingCurveAbi,
         functionName: "buy",
-        args: [0n, owner],
+        args: [applySlippage(tokensOut, slippage), owner],
         value: wei,
       });
     } else if (needsApproval) {
@@ -159,7 +241,7 @@ function CurveTrade({
         address: curve,
         abi: bondingCurveAbi,
         functionName: "sell",
-        args: [wei, 0n, owner],
+        args: [wei, applySlippage(ethOut, slippage), owner],
       });
     }
   }
@@ -167,18 +249,32 @@ function CurveTrade({
   const out =
     side === "buy"
       ? buyQuote
-        ? `${fmtTokens((buyQuote as [bigint, bigint])[0])} ${symbol}`
+        ? `${fmtTokens(tokensOut)} ${symbol}`
         : "—"
       : sellQuote
-        ? `${fmtEth(sellQuote as bigint)} ETH`
+        ? `${fmtEth(ethOut)} ETH`
         : "—";
+
+  const minOut =
+    side === "buy"
+      ? buyQuote
+        ? `${fmtTokens(applySlippage(tokensOut, slippage))} ${symbol}`
+        : null
+      : sellQuote
+        ? `${fmtEth(applySlippage(ethOut, slippage))} ETH`
+        : null;
 
   return (
     <>
       <AmountInput amount={amount} setAmount={setAmount} unit={side === "buy" ? "ETH" : symbol} />
-      <div className="text-sm text-white/60 mb-3">
+      <div className="text-sm text-white/60 mb-1">
         You receive ≈ <span className="text-white">{out}</span>
       </div>
+      {minOut && (
+        <div className="text-xs text-white/40 mb-3">
+          Min after {slippage}% slippage: {minOut}
+        </div>
+      )}
       {error && <p className="text-pump-red text-xs mb-2 break-words">{error.message}</p>}
       <button
         className={side === "buy" ? "btn-green w-full" : "btn-red w-full"}
@@ -207,6 +303,7 @@ function AmmTrade({
   side,
   amount,
   setAmount,
+  slippage,
   owner,
 }: {
   token: `0x${string}`;
@@ -214,6 +311,7 @@ function AmmTrade({
   side: "buy" | "sell";
   amount: string;
   setAmount: (v: string) => void;
+  slippage: number;
   owner?: `0x${string}`;
 }) {
   const wei = parseAmount(amount);
@@ -232,7 +330,7 @@ function AmmTrade({
     address: pairAddr,
     abi: pumpSwapPairAbi,
     functionName: "getReserves",
-    query: { enabled: !!pairAddr },
+    query: { enabled: !!pairAddr, refetchInterval: 5000 },
   });
 
   const { data: allowance } = useReadContract({
@@ -255,12 +353,13 @@ function AmmTrade({
 
   function act() {
     if (!owner || !pairAddr) return;
+    const amountOutMin = applySlippage(quote, slippage);
     if (side === "buy") {
       writeContract({
         address: pairAddr,
         abi: pumpSwapPairAbi,
         functionName: "swapExactETHForTokens",
-        args: [0n, owner],
+        args: [amountOutMin, owner],
         value: wei,
       });
     } else if (needsApproval) {
@@ -270,21 +369,29 @@ function AmmTrade({
         address: pairAddr,
         abi: pumpSwapPairAbi,
         functionName: "swapExactTokensForETH",
-        args: [wei, 0n, owner],
+        args: [wei, amountOutMin, owner],
       });
     }
   }
 
   return (
     <>
-      <div className="text-xs text-pump-accent mb-2">Trading on PumpSwap 🎓</div>
+      <div className="text-xs text-pump-accent mb-2">Trading on FletchSwap 🎓</div>
       <AmountInput amount={amount} setAmount={setAmount} unit={side === "buy" ? "ETH" : symbol} />
-      <div className="text-sm text-white/60 mb-3">
+      <div className="text-sm text-white/60 mb-1">
         You receive ≈{" "}
         <span className="text-white">
           {side === "buy" ? `${fmtTokens(quote)} ${symbol}` : `${fmtEth(quote)} ETH`}
         </span>
       </div>
+      {quote > 0n && (
+        <div className="text-xs text-white/40 mb-3">
+          Min after {slippage}% slippage:{" "}
+          {side === "buy"
+            ? `${fmtTokens(applySlippage(quote, slippage))} ${symbol}`
+            : `${fmtEth(applySlippage(quote, slippage))} ETH`}
+        </div>
+      )}
       {error && <p className="text-pump-red text-xs mb-2 break-words">{error.message}</p>}
       <button
         className={side === "buy" ? "btn-green w-full" : "btn-red w-full"}

@@ -6,6 +6,9 @@ import { useAccount, useReadContract, useReadContracts } from "wagmi";
 import { bondingCurveAbi, erc20Abi, launchpadFactoryAbi } from "@/lib/abis";
 import { LAUNCHPAD_FACTORY, activeChain } from "@/lib/config";
 import { TradePanel } from "@/components/TradePanel";
+import { PriceChart } from "@/components/PriceChart";
+import { TradeHistory } from "@/components/TradeHistory";
+import { fmtUsd, hasApi, useApiToken } from "@/lib/api";
 import { fmtEth, fmtTokens, shortAddr } from "@/lib/format";
 import type { TokenInfo } from "@/components/TokenCard";
 
@@ -50,6 +53,8 @@ export default function TokenPage() {
     query: { enabled: !!address, refetchInterval: 5000 },
   });
 
+  const { data: apiToken } = useApiToken(token);
+
   if (!t) {
     return <p className="text-white/50">Loading token…</p>;
   }
@@ -92,7 +97,7 @@ export default function TokenPage() {
 
           <div className="card p-5">
             <div className="flex justify-between text-sm text-white/60 mb-2">
-              <span>{graduated ? "Graduated to PumpSwap 🎓" : "Bonding curve progress"}</span>
+              <span>{graduated ? "Graduated to FletchSwap 🎓" : "Bonding curve progress"}</span>
               <span>{fmtEth(raised)} / {fmtEth(goal)} ETH</span>
             </div>
             <div className="h-3 bg-pump-bg rounded-full overflow-hidden">
@@ -104,7 +109,18 @@ export default function TokenPage() {
               <Stat label="Your balance" value={`${fmtTokens((bal as bigint) ?? 0n)} ${t.symbol}`} />
               <Stat label="Status" value={graduated ? "Live on AMM" : "On curve"} />
             </div>
+            {apiToken && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4 text-sm border-t border-pump-border/50 pt-4">
+                <Stat label="Price (USD)" value={fmtUsd(apiToken.priceUsd)} />
+                <Stat label="Market cap" value={fmtUsd(apiToken.marketCapUsd)} />
+                <Stat label="24h volume" value={fmtUsd(apiToken.volume24hUsd)} />
+                <Stat label="Holders" value={String(apiToken.holdersCount)} />
+              </div>
+            )}
           </div>
+
+          {hasApi && <PriceChart token={token} />}
+          {hasApi && <TradeHistory token={token} symbol={t.symbol} />}
 
           <div className="card p-4 text-xs text-white/50 space-y-1">
             <div>Token: <a className="text-pump-accent" href={`${activeChain.blockExplorers?.default.url}/address/${t.token}`} target="_blank" rel="noreferrer">{shortAddr(t.token)}</a></div>
