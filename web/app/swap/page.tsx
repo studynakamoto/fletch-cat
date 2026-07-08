@@ -5,7 +5,7 @@ import { useReadContract } from "wagmi";
 import { launchpadFactoryAbi } from "@/lib/abis";
 import { LAUNCHPAD_FACTORY, PLATFORM_TOKEN, hasPlatformToken } from "@/lib/config";
 import { TradePanel } from "@/components/TradePanel";
-import { useApiTokens } from "@/lib/api";
+import { hasApi, useApiTokens } from "@/lib/api";
 import type { TokenInfo } from "@/components/TokenCard";
 
 const ZERO = "0x0000000000000000000000000000000000000000" as `0x${string}`;
@@ -31,9 +31,9 @@ export default function SwapPage() {
     }
     for (const t of (data as TokenInfo[] | undefined) ?? []) {
       if (t.token.toLowerCase() === PLATFORM_TOKEN.toLowerCase()) continue;
-      // without the indexer we can't cheaply know graduation status here,
-      // so fall back to listing everything — non-graduated quotes show 0
-      if (graduatedSet.size === 0 || graduatedSet.has(t.token.toLowerCase())) {
+      // Only list graduated launchpad tokens (indexer). Without the API, skip them —
+      // otherwise buys can target a missing pool and send ETH to address(0).
+      if (hasApi && graduatedSet.has(t.token.toLowerCase())) {
         list.push({ address: t.token, label: `${t.name} ($${t.symbol})` });
       }
     }
@@ -77,7 +77,13 @@ export default function SwapPage() {
           </select>
 
           {active && (
-            <TradePanel token={active as `0x${string}`} curve={ZERO} symbol={symbol} graduated />
+            <TradePanel
+              token={active as `0x${string}`}
+              curve={ZERO}
+              symbol={symbol}
+              graduated={true}
+              forceAmm
+            />
           )}
         </>
       )}

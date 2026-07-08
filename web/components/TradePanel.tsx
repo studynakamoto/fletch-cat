@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { parseEther } from "viem";
+import { formatEther, parseEther } from "viem";
 import {
   useAccount,
+  useBalance,
   useReadContract,
   useWaitForTransactionReceipt,
   useWriteContract,
@@ -17,12 +18,24 @@ import {
   uniswapV2RouterAbi,
 } from "@/lib/abis";
 import { DEX_FACTORY, DEX_ROUTER, PUMPSWAP_FACTORY, WETH, hasV2Dex } from "@/lib/config";
-import { fmtEth, fmtTokens } from "@/lib/format";
+import { fmtEth, fmtTokens, isZeroAddress } from "@/lib/format";
 
 const MAX_UINT = (2n ** 256n - 1n) as bigint;
 
 const SLIPPAGE_PRESETS = [0.5, 1, 2];
 const DEFAULT_SLIPPAGE = 1;
+/** ETH left in wallet for gas when clicking Max on a buy. */
+const GAS_BUFFER = parseEther("0.002");
+
+function formatInputAmount(wei: bigint): string {
+  if (wei <= 0n) return "";
+  const s = formatEther(wei);
+  return s.includes(".") ? s.replace(/0+$/, "").replace(/\.$/, "") : s;
+}
+
+function maxBuyEth(balance: bigint): bigint {
+  return balance > GAS_BUFFER ? balance - GAS_BUFFER : 0n;
+}
 
 /** quote minus slippage tolerance (slippagePct e.g. 1 = 1%) */
 function applySlippage(quote: bigint, slippagePct: number): bigint {
@@ -36,11 +49,14 @@ export function TradePanel({
   curve,
   symbol,
   graduated,
+  forceAmm = false,
 }: {
   token: `0x${string}`;
   curve: `0x${string}`;
   symbol: string;
   graduated: boolean;
+  /** FletchSwap page — always route through the AMM, never the bonding curve. */
+  forceAmm?: boolean;
 }) {
   const { address } = useAccount();
   const [side, setSide] = useState<"buy" | "sell">("buy");
@@ -64,7 +80,7 @@ export function TradePanel({
         </button>
       </div>
 
-      {graduated ? (
+      {graduated || forceAmm ? (
         <AmmTrade
           token={token}
           symbol={symbol}
@@ -144,21 +160,37 @@ function AmountInput({
   amount,
   setAmount,
   unit,
+  onMax,
+  maxDisabled,
 }: {
   amount: string;
   setAmount: (v: string) => void;
   unit: string;
+  onMax?: () => void;
+  maxDisabled?: boolean;
 }) {
   return (
     <div className="relative mb-3">
       <input
-        className="input pr-16"
+        className={`input ${onMax ? "pr-28" : "pr-16"}`}
         placeholder="0.0"
         inputMode="decimal"
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
       />
-      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 text-sm">{unit}</span>
+      <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+        {onMax && (
+          <button
+            type="button"
+            onClick={onMax}
+            disabled={maxDisabled}
+            className="text-xs font-semibold text-pump-green hover:text-green-400 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Max
+          </button>
+        )}
+        <span className="text-white/50 text-sm">{unit}</span>
+      </div>
     </div>
   );
 }
@@ -197,6 +229,19 @@ function CurveTrade({
   const { writeContract, data: hash, isPending, error } = useWriteContract();
   const { isLoading: mining } = useWaitForTransactionReceipt({ hash });
 
+  const { data: ethBalance } = useBalance({
+    address: owner,
+    query: { enabled: !!owner },
+  });
+
+  const { data: tokenBalance } = useReadContract({
+    address: token,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    args: owner ? [owner] : undefined,
+    query: { enabled: !!owner },
+  });
+
   const { data: buyQuote } = useReadContract({
     address: curve,
     abi: bondingCurveAbi,
@@ -226,8 +271,23 @@ function CurveTrade({
   const tokensOut = buyQuote ? (buyQuote as [bigint, bigint])[0] : 0n;
   const ethOut = (sellQuote as bigint) ?? 0n;
 
+  function fillMax() {
+    if (side === "buy") {
+      const bal = ethBalance?.value ?? 0n;
+      setAmount(formatInputAmount(maxBuyEth(bal)));
+    } else {
+      const bal = (tokenBalance as bigint) ?? 0n;
+      setAmount(formatInputAmount(bal));
+    }
+  }
+
+  const maxDisabled =
+    side === "buy"
+      ? maxBuyEth(ethBalance?.value ?? 0n) === 0n
+      : ((tokenBalance as bigint) ?? 0n) === 0n;
+
   function act() {
-    if (!owner) return;
+    if (!owner || isZeroAddress(curve)) return;
     if (side === "buy") {
       writeContract({
         address: curve,
@@ -273,7 +333,13 @@ function CurveTrade({
 
   return (
     <>
-      <AmountInput amount={amount} setAmount={setAmount} unit={side === "buy" ? "ETH" : symbol} />
+      <AmountInput
+        amount={amount}
+        setAmount={setAmount}
+        unit={side === "buy" ? "ETH" : symbol}
+        onMax={owner ? fillMax : undefined}
+        maxDisabled={maxDisabled}
+      />
       <div className="text-sm text-white/60 mb-1">
         You receive ≈ <span className="text-white">{out}</span>
       </div>
@@ -285,12 +351,14 @@ function CurveTrade({
       {error && <p className="text-pump-red text-xs mb-2 break-words">{error.message}</p>}
       <button
         className={side === "buy" ? "btn-green w-full" : "btn-red w-full"}
-        disabled={!owner || wei === 0n || isPending || mining}
+        disabled={!owner || wei === 0n || isZeroAddress(curve) || isPending || mining}
         onClick={act}
       >
         {!owner
           ? "Connect wallet"
-          : isPending || mining
+          : isZeroAddress(curve)
+            ? "Invalid curve"
+            : isPending || mining
             ? "Confirming…"
             : side === "buy"
               ? `Buy ${symbol}`
@@ -325,6 +393,19 @@ function AmmTrade({
   const { writeContract, data: hash, isPending, error } = useWriteContract();
   const { isLoading: mining } = useWaitForTransactionReceipt({ hash });
 
+  const { data: ethBalance } = useBalance({
+    address: owner,
+    query: { enabled: !!owner },
+  });
+
+  const { data: tokenBalance } = useReadContract({
+    address: token,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    args: owner ? [owner] : undefined,
+    query: { enabled: !!owner },
+  });
+
   // Preferred venue: a standard Uniswap v2 WETH/token pool (DEXScreener-visible).
   const { data: v2Pair } = useReadContract({
     address: DEX_FACTORY,
@@ -333,8 +414,7 @@ function AmmTrade({
     args: [token, WETH],
     query: { enabled: hasV2Dex },
   });
-  const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
-  const useV2 = hasV2Dex && !!v2Pair && v2Pair !== ZERO_ADDR;
+  const useV2 = hasV2Dex && !isZeroAddress(v2Pair as string | undefined);
 
   // Fallback venue: legacy PumpSwap ETH pair.
   const { data: pair } = useReadContract({
@@ -342,8 +422,10 @@ function AmmTrade({
     abi: pumpSwapFactoryAbi,
     functionName: "getPair",
     args: [token],
+    query: { enabled: !isZeroAddress(PUMPSWAP_FACTORY) },
   });
-  const pairAddr = pair as `0x${string}` | undefined;
+  const pairAddr = !isZeroAddress(pair as string | undefined) ? (pair as `0x${string}`) : undefined;
+  const hasVenue = useV2 || !!pairAddr;
 
   const { data: reserves } = useReadContract({
     address: pairAddr,
@@ -389,10 +471,27 @@ function AmmTrade({
 
   const needsApproval = side === "sell" && wei > 0n && ((allowance as bigint) ?? 0n) < wei;
 
+  function fillMax() {
+    if (side === "buy") {
+      const bal = ethBalance?.value ?? 0n;
+      setAmount(formatInputAmount(maxBuyEth(bal)));
+    } else {
+      const bal = (tokenBalance as bigint) ?? 0n;
+      setAmount(formatInputAmount(bal));
+    }
+  }
+
+  const maxDisabled =
+    side === "buy"
+      ? maxBuyEth(ethBalance?.value ?? 0n) === 0n
+      : ((tokenBalance as bigint) ?? 0n) === 0n;
+
   function act() {
-    if (!owner || !spender) return;
+    if (!owner || !hasVenue) return;
     const amountOutMin = applySlippage(quote, slippage);
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 600);
+    const spender = useV2 ? DEX_ROUTER : pairAddr;
+    if (!spender || isZeroAddress(spender)) return;
     if (needsApproval) {
       writeContract({ address: token, abi: erc20Abi, functionName: "approve", args: [spender, MAX_UINT] });
       return;
@@ -440,7 +539,13 @@ function AmmTrade({
       <div className="text-xs text-pump-accent mb-2">
         {useV2 ? "Trading on Uniswap v2 (FletchSwap route) 🎓" : "Trading on FletchSwap 🎓"}
       </div>
-      <AmountInput amount={amount} setAmount={setAmount} unit={side === "buy" ? "ETH" : symbol} />
+      <AmountInput
+        amount={amount}
+        setAmount={setAmount}
+        unit={side === "buy" ? "ETH" : symbol}
+        onMax={owner ? fillMax : undefined}
+        maxDisabled={maxDisabled}
+      />
       <div className="text-sm text-white/60 mb-1">
         You receive ≈{" "}
         <span className="text-white">
@@ -455,14 +560,21 @@ function AmmTrade({
             : `${fmtEth(applySlippage(quote, slippage))} ETH`}
         </div>
       )}
+      {!hasVenue && (
+        <p className="text-pump-red text-xs mb-2">
+          No liquidity pool found for this token. It may not have graduated yet.
+        </p>
+      )}
       {error && <p className="text-pump-red text-xs mb-2 break-words">{error.message}</p>}
       <button
         className={side === "buy" ? "btn-green w-full" : "btn-red w-full"}
-        disabled={!owner || wei === 0n || isPending || mining}
+        disabled={!owner || wei === 0n || !hasVenue || isPending || mining}
         onClick={act}
       >
         {!owner
           ? "Connect wallet"
+          : !hasVenue
+            ? "No pool available"
           : isPending || mining
             ? "Confirming…"
             : side === "buy"

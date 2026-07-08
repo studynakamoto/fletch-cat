@@ -1,4 +1,4 @@
-import { formatEther } from "viem";
+import { formatEther, isAddress, zeroAddress } from "viem";
 
 export function fmtEth(wei: bigint, dp = 4): string {
   const n = Number(formatEther(wei));
@@ -25,4 +25,10 @@ export function shortAddr(addr?: string): string {
 
 export function isImageSrc(s: string): boolean {
   return s.startsWith("http://") || s.startsWith("https://") || s.startsWith("/");
+}
+
+export function isZeroAddress(addr?: string | null): boolean {
+  if (!addr) return true;
+  if (!isAddress(addr)) return true;
+  return addr.toLowerCase() === zeroAddress.toLowerCase();
 }
