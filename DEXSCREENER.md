@@ -36,26 +36,39 @@ are invisible to aggregators.
 
 ## The plan (in order)
 
-1. **Deploy our Uniswap v2 clone** (`contracts/src/dex`) to mainnet — it emits
-   **standard Uniswap v2 events** (`PairCreated`, `Mint`, `Burn`, `Swap`,
-   `Sync`), which makes every FletchSwap v2 pool auto-indexable the moment
-   DEXScreener maps our factory. Command (needs funded deploy key + gas):
+1. ✅ **BUILT: V2 launchpad with DEXScreener-visible graduations**
+   (`contracts/src/v2/`). `LaunchpadFactoryV2` curves graduate straight into
+   **canonical Uniswap v2 pools** on Robinhood Chain — the exact pool type
+   DEXScreener already indexes (the FLETCH pair proves it). Every token that
+   graduates charts automatically, zero integration needed. Fully tested
+   (`test/launchpadV2.test.ts`, 25/25 suite green). **Deploy (needs user
+   go-ahead — gas only):**
 
    ```bash
    cd contracts
+   ROUTER_ADDRESS=0x89e5db8b5aa49aa85ac63f691524311aeb649eba npm run deploy:v2:mainnet
+   # then set the printed NEXT_PUBLIC_* vars in Vercel
+   ```
+
+2. **(Optional) Deploy our own FletchSwap v2 fork** (`contracts/src/dex`) for a
+   branded DEX and pass its router as `ROUTER_ADDRESS` instead — same standard
+   events, but DEXScreener must map our factory before pairs chart, which
+   needs the Discord application + volume. Recommended sequencing: launch on
+   the canonical Uniswap router first (instant charts), migrate to the
+   FletchSwap router once listed.
+
+   ```bash
    WETH_ADDRESS=0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73 npm run deploy:dex:mainnet
    ```
 
-2. **Verify the contracts on Blockscout** (free, no API key) — "open-sourced"
+3. **Verify the contracts on Blockscout** (free, no API key) — "open-sourced"
    should be true on-chain, not just on GitHub.
 
-3. **Point graduations / new liquidity at the v2 clone** so volume concentrates
-   in indexable pools (also fixes the split-liquidity issue in TOKENOMICS §3.3).
+4. **Build real volume.** This is the gating factor for a *named launchpad
+   listing* — grow launches + trading first, then apply.
 
-4. **Build real volume.** This is the gating factor — a few hundred dollars of
-   liquidity won't clear their bar. Grow launches + trading first, then apply.
-
-5. **Apply in their Discord** (template below).
+5. **Apply in their Discord** (template below) for FletchPad launchpad
+   attribution + FletchSwap dexId.
 
 6. Optional, immediate: **enhance the FLETCH token profile** (logo, socials,
    description) on the existing chart via DEXScreener's paid Token Info /

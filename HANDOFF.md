@@ -59,6 +59,10 @@ Points at the same addresses; `ETH_USD` stubs the ETH price for USD math.
   listing plan in `DEXSCREENER.md`.
 - Our Uniswap v2 clone (`contracts/src/dex`) is built + tested but **not yet
   deployed** — deploy with `WETH_ADDRESS=0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73 npm run deploy:dex:mainnet`.
+- **NEW: LaunchpadFactoryV2** (`contracts/src/v2`) — graduations seed canonical
+  **Uniswap v2** pools (auto-charting on DEXScreener). Built + tested, not yet
+  deployed: `ROUTER_ADDRESS=0x89e5db8b5aa49aa85ac63f691524311aeb649eba npm run deploy:v2:mainnet`,
+  then set `NEXT_PUBLIC_LAUNCHPAD_FACTORY` + `NEXT_PUBLIC_DEX_*` in Vercel.
 - Contracts are **unaudited**.
 - See `README.md`, `CONTRACTS.md`, `DEPLOY.md`, `FLETCH_CAT.md`, `TOKENOMICS.md` for deeper docs.
 ```

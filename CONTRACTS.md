@@ -34,6 +34,24 @@ Separately, `contracts/src/dex/` contains a **full Uniswap v2 clone**
 (Factory, Router02, Pair, WETH9) — built and tested, **not yet deployed to
 mainnet**. It is independent of the launchpad flow above.
 
+## V2: DEXScreener-visible graduations (`src/v2/`)
+
+`LaunchpadFactoryV2` + `BondingCurveV2` are the **same launchpad and curve
+math**, with one change: graduation seeds a **standard Uniswap v2 WETH/token
+pool through a v2 router** (`addLiquidityETH`, LP minted to `0xdead`).
+Standard v2 pairs emit the events aggregators index, so **every graduated
+token charts on DEXScreener automatically** — proven by the FLETCH Uniswap
+pair already charting there.
+
+- Deploy with `ROUTER_ADDRESS=<v2 router> npm run deploy:v2:mainnet` — point it
+  at the **canonical Uniswap v2 Router02 on Robinhood Chain**
+  (`0x89e5db8b5aa49aa85ac63f691524311aeb649eba`) or at our own FletchSwap
+  router from `deploy:dex:*`.
+- The curve exposes `pair()` after graduation; post-graduation trading goes
+  through the router (the web app auto-detects this via
+  `NEXT_PUBLIC_DEX_ROUTER/FACTORY/WETH`).
+- Tests: `test/launchpadV2.test.ts` (graduation, LP burn, fee, router swaps).
+
 ## The five contracts
 
 | Contract | File | Role |

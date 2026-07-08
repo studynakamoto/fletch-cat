@@ -20,6 +20,13 @@ export const TREASURY = (process.env.NEXT_PUBLIC_TREASURY ?? ZERO) as `0x${strin
 
 export const hasPlatformToken = PLATFORM_TOKEN !== ZERO && PLATFORM_PAIR !== ZERO;
 
+// Uniswap v2-compatible DEX (canonical RH Chain Uniswap or FletchSwap fork).
+// When configured, graduated tokens with a v2 pool trade through the router.
+export const DEX_ROUTER = (process.env.NEXT_PUBLIC_DEX_ROUTER ?? ZERO) as `0x${string}`;
+export const DEX_FACTORY = (process.env.NEXT_PUBLIC_DEX_FACTORY ?? ZERO) as `0x${string}`;
+export const WETH = (process.env.NEXT_PUBLIC_WETH ?? ZERO) as `0x${string}`;
+export const hasV2Dex = DEX_ROUTER !== ZERO && DEX_FACTORY !== ZERO && WETH !== ZERO;
+
 export const wagmiConfig = getDefaultConfig({
   appName: "fletch.cat",
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_ID || "fletchcat-dev",

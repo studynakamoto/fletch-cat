@@ -186,10 +186,14 @@ Point fees at a different wallet with `FEE_RECIPIENT` at deploy time, or call
   USD stats, fed by the `backend/` indexer. Set `NEXT_PUBLIC_API_URL` in the
   web env to enable (site degrades gracefully without it).
 - ✅ **/swap page** — FletchSwap UI for any graduated token.
+- ✅ **LaunchpadFactoryV2** (`contracts/src/v2`) — graduations seed canonical
+  **Uniswap v2** pools so every graduated token **auto-charts on DEXScreener**.
+  Tested (25/25); web app auto-routes graduated trading through the router.
+- ⬜ Deploy V2 to mainnet (one command, gas only — needs owner go-ahead):
+  `ROUTER_ADDRESS=0x89e5db8b5aa49aa85ac63f691524311aeb649eba npm run deploy:v2:mainnet`
 - ⬜ Deploy the backend (Docker — see `backend/README.md`) and set
   `NEXT_PUBLIC_API_URL` in Vercel.
-- ⬜ Deploy the Uniswap v2 clone to mainnet + DEXScreener listing — see
-  [DEXSCREENER.md](./DEXSCREENER.md).
+- ⬜ DEXScreener launchpad/DEX application — see [DEXSCREENER.md](./DEXSCREENER.md).
 - ⬜ Curve trades have no per-trade fee; the platform fee is taken once at
   graduation. Add a trade fee if desired.
 - ⬜ Contracts are unaudited. **Do not scale real value without an audit.**

@@ -8,8 +8,15 @@ import {
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
-import { bondingCurveAbi, erc20Abi, pumpSwapFactoryAbi, pumpSwapPairAbi } from "@/lib/abis";
-import { PUMPSWAP_FACTORY } from "@/lib/config";
+import {
+  bondingCurveAbi,
+  erc20Abi,
+  pumpSwapFactoryAbi,
+  pumpSwapPairAbi,
+  uniswapV2FactoryAbi,
+  uniswapV2RouterAbi,
+} from "@/lib/abis";
+import { DEX_FACTORY, DEX_ROUTER, PUMPSWAP_FACTORY, WETH, hasV2Dex } from "@/lib/config";
 import { fmtEth, fmtTokens } from "@/lib/format";
 
 const MAX_UINT = (2n ** 256n - 1n) as bigint;
@@ -318,6 +325,18 @@ function AmmTrade({
   const { writeContract, data: hash, isPending, error } = useWriteContract();
   const { isLoading: mining } = useWaitForTransactionReceipt({ hash });
 
+  // Preferred venue: a standard Uniswap v2 WETH/token pool (DEXScreener-visible).
+  const { data: v2Pair } = useReadContract({
+    address: DEX_FACTORY,
+    abi: uniswapV2FactoryAbi,
+    functionName: "getPair",
+    args: [token, WETH],
+    query: { enabled: hasV2Dex },
+  });
+  const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
+  const useV2 = hasV2Dex && !!v2Pair && v2Pair !== ZERO_ADDR;
+
+  // Fallback venue: legacy PumpSwap ETH pair.
   const { data: pair } = useReadContract({
     address: PUMPSWAP_FACTORY,
     abi: pumpSwapFactoryAbi,
@@ -330,30 +349,74 @@ function AmmTrade({
     address: pairAddr,
     abi: pumpSwapPairAbi,
     functionName: "getReserves",
-    query: { enabled: !!pairAddr, refetchInterval: 5000 },
+    query: { enabled: !useV2 && !!pairAddr, refetchInterval: 5000 },
   });
 
+  const path = useMemo<`0x${string}`[]>(
+    () => (side === "buy" ? [WETH, token] : [token, WETH]),
+    [side, token],
+  );
+
+  const { data: v2Amounts } = useReadContract({
+    address: DEX_ROUTER,
+    abi: uniswapV2RouterAbi,
+    functionName: "getAmountsOut",
+    args: [wei, path],
+    query: { enabled: useV2 && wei > 0n, refetchInterval: 5000 },
+  });
+
+  const spender = useV2 ? DEX_ROUTER : pairAddr;
   const { data: allowance } = useReadContract({
     address: token,
     abi: erc20Abi,
     functionName: "allowance",
-    args: owner && pairAddr ? [owner, pairAddr] : undefined,
-    query: { enabled: !!owner && !!pairAddr && side === "sell" },
+    args: owner && spender ? [owner, spender] : undefined,
+    query: { enabled: !!owner && !!spender && side === "sell" },
   });
 
   const quote = useMemo(() => {
-    if (!reserves || wei === 0n) return 0n;
+    if (wei === 0n) return 0n;
+    if (useV2) {
+      const amounts = v2Amounts as bigint[] | undefined;
+      return amounts ? amounts[amounts.length - 1] : 0n;
+    }
+    if (!reserves) return 0n;
     const [rEth, rTok] = reserves as [bigint, bigint];
     const feeIn = wei * 997n;
     if (side === "buy") return (feeIn * rTok) / (rEth * 1000n + feeIn);
     return (feeIn * rEth) / (rTok * 1000n + feeIn);
-  }, [reserves, wei, side]);
+  }, [reserves, v2Amounts, useV2, wei, side]);
 
   const needsApproval = side === "sell" && wei > 0n && ((allowance as bigint) ?? 0n) < wei;
 
   function act() {
-    if (!owner || !pairAddr) return;
+    if (!owner || !spender) return;
     const amountOutMin = applySlippage(quote, slippage);
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 600);
+    if (needsApproval) {
+      writeContract({ address: token, abi: erc20Abi, functionName: "approve", args: [spender, MAX_UINT] });
+      return;
+    }
+    if (useV2) {
+      if (side === "buy") {
+        writeContract({
+          address: DEX_ROUTER,
+          abi: uniswapV2RouterAbi,
+          functionName: "swapExactETHForTokens",
+          args: [amountOutMin, path, owner, deadline],
+          value: wei,
+        });
+      } else {
+        writeContract({
+          address: DEX_ROUTER,
+          abi: uniswapV2RouterAbi,
+          functionName: "swapExactTokensForETH",
+          args: [wei, amountOutMin, path, owner, deadline],
+        });
+      }
+      return;
+    }
+    if (!pairAddr) return;
     if (side === "buy") {
       writeContract({
         address: pairAddr,
@@ -362,8 +425,6 @@ function AmmTrade({
         args: [amountOutMin, owner],
         value: wei,
       });
-    } else if (needsApproval) {
-      writeContract({ address: token, abi: erc20Abi, functionName: "approve", args: [pairAddr, MAX_UINT] });
     } else {
       writeContract({
         address: pairAddr,
@@ -376,7 +437,9 @@ function AmmTrade({
 
   return (
     <>
-      <div className="text-xs text-pump-accent mb-2">Trading on FletchSwap 🎓</div>
+      <div className="text-xs text-pump-accent mb-2">
+        {useV2 ? "Trading on Uniswap v2 (FletchSwap route) 🎓" : "Trading on FletchSwap 🎓"}
+      </div>
       <AmountInput amount={amount} setAmount={setAmount} unit={side === "buy" ? "ETH" : symbol} />
       <div className="text-sm text-white/60 mb-1">
         You receive ≈{" "}
