@@ -89,8 +89,26 @@ Each launch is a **separate ERC20** with its own bonding curve:
 | Curve trade fee | **0%** | No per-buy/sell fee on curve (MVP) |
 | PumpSwap swap fee | **0.30%** | To LPs after graduation |
 
-**Platform revenue today = graduation fees only** (1% × ETH raised per completed curve).  
-Example: token graduates with **10 ETH** raised → **0.1 ETH** to treasury.
+**Platform revenue today (v1 live) = graduation fees only** (1% × ETH raised per completed curve).
+
+### 3.1b Fee model v2 (in repo — **not deployed**)
+
+`LaunchpadFactoryV2` implements the next economics (see [docs/FACTORIES.md](./docs/FACTORIES.md)):
+
+| Mechanism | Value |
+|-----------|-------|
+| Platform token skim | **2%** of every launch → treasury |
+| Curve supply | **98%** (784M sold / 196M migration at 1B total) |
+| Graduation fee | **5%** at launch → decays **0.5% per graduation** → **1%** floor |
+| Fee ETH split | **70%** thickens Uniswap v2 LP · **30%** treasury |
+
+Example (v2, first graduation, 10 ETH raised):
+
+- Total fee: 0.5 ETH (5%)
+- Treasury: 0.15 ETH (30% of fee)
+- Extra LP depth: 0.35 ETH (70% of fee) — on top of base liquidity
+
+**v1 mainnet unchanged** until explicit v2 deploy after wallet migration.
 
 ### 3.2 $FLETCH flywheel (intended)
 
@@ -170,11 +188,11 @@ Starting point: **1,000,000,000 FLETCH** fixed.
 
 Publish this as a simple public policy once agreed:
 
-| Rule | Proposal |
-|------|----------|
-| **Fee source** | 100% of launchpad graduation fees (1% of raised ETH) |
-| **Destination** | Multisig treasury (migrate from single EOA) |
-| **Buyback** | ≥ **50–80%** of *net* fee ETH used for market buybacks weekly |
+| Rule | Proposal (v1 live) | v2 (repo, not deployed) |
+|------|-------------------|-------------------------|
+| **Fee source** | 1% of raised ETH on graduation | 5%→1% decaying; 2% token skim on create |
+| **Destination** | 100% treasury | 30% of fee ETH treasury; 70% thickens LP |
+| **Buyback** | ≥ **50–80%** of *net* fee ETH used for market buybacks weekly | Same policy on treasury portion |
 | **Burn** | Default: send bought FLETCH to `0xdead` (or hold in treasury with disclosure) |
 | **Ops reserve** | 20–50% of fees for gas, LP adds, listings, audits |
 | **Reporting** | Weekly tweet/dashboard: fees in, FLETCH bought, burned, treasury balance |
@@ -263,5 +281,6 @@ Users who launch via fletch.cat get **standard curve economics** (not customizab
 | Version | Date | Notes |
 |---------|------|-------|
 | 0.1 | Jul 2026 | Initial draft from live mainnet deploy + product plan |
+| 0.2 | Jul 2026 | Added fee model v2 spec (contracts in repo, not mainnet) |
 
 **Next review:** With pepedrt — finalize Section 4 allocations and Section 5 buyback policy before site goes fully public.
