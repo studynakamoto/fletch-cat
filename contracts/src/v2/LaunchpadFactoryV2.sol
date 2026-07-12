@@ -1,48 +1,36 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Token} from "../Token.sol";
 import {BondingCurveV2} from "./BondingCurveV2.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-/// @title LaunchpadFactoryV2 ("FletchPad")
-/// @notice Same launchpad as LaunchpadFactory, but curves graduate into
-///         standard **Uniswap v2** WETH/token pools via a v2 router — making
-///         every graduated token automatically indexable by DEX aggregators.
-///         Point `router` at the canonical Uniswap v2 Router02 on Robinhood
-///         Chain, or at our own FletchSwap v2 router.
+/// @title LaunchpadFactoryV2
+/// @notice V2 launchpad: 2% platform-token skim on create, decaying graduation
+///         fees, and LP-thickening fee split. Graduates into Uniswap v2.
 contract LaunchpadFactoryV2 is Ownable {
-    // ---- curve economics (immutable, set at deploy) ----
-    uint256 public immutable totalSupply_;
-    uint256 public immutable saleSupply;
-    uint256 public immutable migrationSupply;
+    address public immutable router;
+    address public immutable feeRecipient;
+    uint256 public immutable totalSupply;
     uint256 public immutable virtualEth;
     uint256 public immutable virtualToken;
-    uint256 public immutable graduationFeeBps;
+    uint256 public immutable saleSupply;
+    uint256 public immutable migrationSupply;
+    /// @notice Bps of total supply skimmed to treasury on every launch (e.g. 200 = 2%).
+    uint256 public immutable platformTokenBps;
+    /// @notice Starting graduation fee (bps). Decays with `graduationCount`.
+    uint256 public immutable maxGraduationFeeBps;
+    uint256 public immutable minGraduationFeeBps;
+    uint256 public immutable feeDecayStepBps;
+    /// @notice Graduations per decay step (usually 1).
+    uint256 public immutable feeDecayInterval;
+    /// @notice Share of graduation fee ETH reinjected into LP (bps).
+    uint256 public immutable feeToLpBps;
 
-    /// @notice Uniswap v2-compatible router curves graduate through.
-    address public immutable router;
-    /// @notice Destination for graduation fees (typically the treasury wallet).
-    ///         Owner-updatable via setFeeRecipient (applies to future tokens).
-    address public feeRecipient;
+    uint256 public graduationCount;
 
-    struct TokenInfo {
-        address token;
-        address curve;
-        string name;
-        string symbol;
-        string description;
-        string image;
-        string twitter;
-        string telegram;
-        string website;
-        address creator;
-        uint256 createdAt;
-    }
-
-    TokenInfo[] public tokens;
-    mapping(address => uint256) public tokenIndex; // token address => index+1 (0 = not found)
-    mapping(address => address) public curveOf; // token => curve
+    mapping(address => address) public curveOf;
+    mapping(address => address) public tokenOf;
 
     event TokenCreated(
         address indexed token,
@@ -50,116 +38,119 @@ contract LaunchpadFactoryV2 is Ownable {
         address indexed creator,
         string name,
         string symbol,
-        uint256 index
+        string image,
+        string description,
+        string twitter,
+        string telegram,
+        string website,
+        uint256 platformSkim,
+        uint256 graduationFeeBps
     );
-    event FeeRecipientUpdated(address indexed feeRecipient);
 
     constructor(
         address router_,
         address feeRecipient_,
-        uint256 totalSupply__,
-        uint256 saleSupply_,
+        uint256 totalSupply_,
         uint256 virtualEth_,
         uint256 virtualToken_,
-        uint256 graduationFeeBps_
+        uint256 saleBpsOfCurve_, // e.g. 8000 = 80% of post-skim supply sold on curve
+        uint256 platformTokenBps_,
+        uint256 maxGraduationFeeBps_,
+        uint256 minGraduationFeeBps_,
+        uint256 feeDecayStepBps_,
+        uint256 feeDecayInterval_,
+        uint256 feeToLpBps_
     ) Ownable(msg.sender) {
-        require(router_ != address(0), "ZERO_ROUTER");
-        require(totalSupply__ > saleSupply_, "BAD_SUPPLY");
+        require(router_ != address(0) && feeRecipient_ != address(0), "ZERO_ADDR");
+        require(platformTokenBps_ <= 1000, "SKIM_TOO_HIGH");
+        require(maxGraduationFeeBps_ >= minGraduationFeeBps_, "BAD_FEE_RANGE");
+        require(feeDecayInterval_ > 0, "BAD_INTERVAL");
+        require(feeToLpBps_ <= 10_000, "BAD_LP_BPS");
+
         router = router_;
         feeRecipient = feeRecipient_;
-        totalSupply_ = totalSupply__;
-        saleSupply = saleSupply_;
-        migrationSupply = totalSupply__ - saleSupply_;
+        totalSupply = totalSupply_;
         virtualEth = virtualEth_;
         virtualToken = virtualToken_;
-        graduationFeeBps = graduationFeeBps_;
+        platformTokenBps = platformTokenBps_;
+
+        uint256 skim = (totalSupply_ * platformTokenBps_) / 10_000;
+        uint256 curveSupply = totalSupply_ - skim;
+        saleSupply = (curveSupply * saleBpsOfCurve_) / 10_000;
+        migrationSupply = curveSupply - saleSupply;
+
+        maxGraduationFeeBps = maxGraduationFeeBps_;
+        minGraduationFeeBps = minGraduationFeeBps_;
+        feeDecayStepBps = feeDecayStepBps_;
+        feeDecayInterval = feeDecayInterval_;
+        feeToLpBps = feeToLpBps_;
     }
 
-    /// @notice Update where future tokens send their graduation fees.
-    function setFeeRecipient(address feeRecipient_) external onlyOwner {
-        require(feeRecipient_ != address(0), "ZERO");
-        feeRecipient = feeRecipient_;
-        emit FeeRecipientUpdated(feeRecipient_);
+    /// @notice Current graduation fee for newly created curves (decays with usage).
+    function currentGraduationFeeBps() public view returns (uint256) {
+        uint256 steps = graduationCount / feeDecayInterval;
+        uint256 reduction = steps * feeDecayStepBps;
+        uint256 headroom = maxGraduationFeeBps - minGraduationFeeBps;
+        if (reduction >= headroom) return minGraduationFeeBps;
+        return maxGraduationFeeBps - reduction;
+    }
+
+    /// @dev Called by BondingCurveV2 after graduation. Only registered curves.
+    function notifyGraduation() external {
+        require(curveOf[msg.sender] != address(0), "NOT_CURVE");
+        graduationCount++;
     }
 
     function createToken(
-        string calldata name,
-        string calldata symbol,
-        string calldata description,
-        string calldata image,
-        string calldata twitter,
-        string calldata telegram,
-        string calldata website
-    ) external payable returns (address tokenAddr, address curveAddr) {
-        Token token = new Token(name, symbol, totalSupply_, address(this));
+        string calldata name_,
+        string calldata symbol_,
+        string calldata image_,
+        string calldata description_,
+        string calldata twitter_,
+        string calldata telegram_,
+        string calldata website_
+    ) external returns (address token, address curve) {
+        uint256 feeBps = currentGraduationFeeBps();
 
-        BondingCurveV2 curve = new BondingCurveV2(
-            address(token),
+        Token t = new Token(name_, symbol_, totalSupply, address(this));
+        token = address(t);
+
+        BondingCurveV2 c = new BondingCurveV2(
+            token,
             router,
+            address(this),
             feeRecipient,
             virtualEth,
             virtualToken,
             saleSupply,
             migrationSupply,
-            graduationFeeBps
+            feeBps,
+            feeToLpBps
         );
+        curve = address(c);
 
-        require(token.transfer(address(curve), totalSupply_), "SEED_FAILED");
+        uint256 skim = (totalSupply * platformTokenBps) / 10_000;
+        uint256 toCurve = totalSupply - skim;
 
-        tokenAddr = address(token);
-        curveAddr = address(curve);
+        require(t.transfer(feeRecipient, skim), "SKIM_FAILED");
+        require(t.transfer(curve, toCurve), "CURVE_TRANSFER_FAILED");
 
-        tokens.push(
-            TokenInfo({
-                token: tokenAddr,
-                curve: curveAddr,
-                name: name,
-                symbol: symbol,
-                description: description,
-                image: image,
-                twitter: twitter,
-                telegram: telegram,
-                website: website,
-                creator: msg.sender,
-                createdAt: block.timestamp
-            })
+        curveOf[curve] = token;
+        tokenOf[token] = curve;
+
+        emit TokenCreated(
+            token,
+            curve,
+            msg.sender,
+            name_,
+            symbol_,
+            image_,
+            description_,
+            twitter_,
+            telegram_,
+            website_,
+            skim,
+            feeBps
         );
-        uint256 idx = tokens.length - 1;
-        tokenIndex[tokenAddr] = idx + 1;
-        curveOf[tokenAddr] = curveAddr;
-
-        emit TokenCreated(tokenAddr, curveAddr, msg.sender, name, symbol, idx);
-
-        // optional dev buy in the same tx
-        if (msg.value > 0) {
-            curve.buy{value: msg.value}(0, msg.sender);
-        }
-    }
-
-    // ---------------------------------------------------------------- views
-
-    function tokenCount() external view returns (uint256) {
-        return tokens.length;
-    }
-
-    /// @notice Returns a page of tokens, newest first.
-    function getTokens(uint256 offset, uint256 limit) external view returns (TokenInfo[] memory page) {
-        uint256 len = tokens.length;
-        if (offset >= len) {
-            return new TokenInfo[](0);
-        }
-        uint256 end = len - offset; // exclusive upper bound in ascending array
-        uint256 start = end > limit ? end - limit : 0;
-        uint256 n = end - start;
-        page = new TokenInfo[](n);
-        for (uint256 i = 0; i < n; i++) {
-            page[i] = tokens[end - 1 - i]; // newest first
-        }
-    }
-
-    function getToken(address token) external view returns (TokenInfo memory) {
-        uint256 idx = tokenIndex[token];
-        require(idx != 0, "UNKNOWN_TOKEN");
-        return tokens[idx - 1];
     }
 }

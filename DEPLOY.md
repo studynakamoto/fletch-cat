@@ -154,7 +154,69 @@ Vercel issues the SSL cert automatically. **You're live.**
 
 ---
 
-## 6) Post-launch checklist
+---
+
+## 6) Deploy the backend indexer (optional, recommended)
+
+The `backend/` service indexes on-chain events and exposes REST APIs for token
+lists, charts, trades, and USD stats. The frontend **works without it** (on-chain
+reads only); set `NEXT_PUBLIC_API_URL` on Vercel when the backend is live.
+
+```bash
+cd pumpclone/backend
+npm install
+npm run build          # must succeed
+```
+
+Create `backend/.env` (never commit):
+
+```env
+RPC_URL=https://rpc.mainnet.chain.robinhood.com
+CHAIN_ID=4663
+LAUNCHPAD_FACTORY=0x345f727b2C919789C991d96865505BD654d1F8F0
+PUMPSWAP_FACTORY=0x4B167BE628c8Bfb60FCEE215a9f3A68FC6f500B9
+PLATFORM_TOKEN=0x60977e96F4173A81674F8D4D636d55D43377e1A7
+PLATFORM_PAIR=0x5635c0a6633E2c79ceB1f450DbE464FA8F0E76Ba
+PORT=3001
+```
+
+Local dev:
+
+```bash
+npm run dev            # API on http://localhost:3001
+# in another terminal:
+npm run index          # catch up indexer
+```
+
+### Railway
+
+1. New project → Deploy from GitHub repo, **Root Directory:** `backend`
+2. **Build command:** `npm install && npm run build`
+3. **Start command:** `npm start`
+4. Add env vars from above (same names)
+5. Add a **second service** or cron job for the indexer: `npm run index` on a schedule,
+   or run indexer in the same process (see `src/server.ts` startup)
+6. Copy the public URL → `NEXT_PUBLIC_API_URL` on Vercel
+
+### Render
+
+1. New **Web Service** → connect repo, root `backend`
+2. Build: `npm install && npm run build` · Start: `npm start`
+3. Add env vars; enable **persistent disk** if you want SQLite to survive redeploys
+   (default path: `data/indexer.db`)
+4. Optional **Background Worker** for `npm run index` on an interval
+
+### Frontend hook-up
+
+```env
+NEXT_PUBLIC_API_URL=https://your-backend.up.railway.app
+```
+
+See [COORDINATION.md](./COORDINATION.md) for API endpoints DragonmasterETH can consume.
+
+---
+
+## 7) Post-launch checklist
 
 - [ ] Visit the domain, click **Connect Wallet**, confirm it connects on Robinhood Chain.
 - [ ] The flagship **$FLETCH** hero shows a price and lets you ape.
@@ -177,6 +239,7 @@ Vercel issues the SSL cert automatically. **You're live.**
 | `NEXT_PUBLIC_PLATFORM_PAIR`     | Vercel           | from deploy output                   |
 | `NEXT_PUBLIC_TREASURY`          | Vercel           | from deploy output                   |
 | `NEXT_PUBLIC_WALLETCONNECT_ID`  | Vercel           | from cloud.walletconnect.com         |
+| `NEXT_PUBLIC_API_URL`           | Vercel (optional)| backend public URL — charts/trades   |
 | `PRIVATE_KEY`                   | contracts/.env   | funded deployer key (never commit)   |
 | `FEE_RECIPIENT`                 | contracts/.env   | treasury wallet (optional)           |
 

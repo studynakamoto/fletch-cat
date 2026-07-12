@@ -2,16 +2,24 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 
 const TOTAL = ethers.parseEther("1000000000");
-const SALE = ethers.parseEther("800000000");
 const VTOKEN = ethers.parseEther("1073000000");
 const VETH = ethers.parseEther("0.5");
-const FEE_BPS = 100n;
+const PLATFORM_SKIM_BPS = 200n; // 2%
+const SALE_BPS_OF_CURVE = 8000n; // 80% of post-skim supply
+const MAX_FEE_BPS = 500n; // 5% at launch
+const MIN_FEE_BPS = 100n; // 1% floor
+const FEE_DECAY_STEP = 50n; // -0.5% per graduation
+const FEE_TO_LP_BPS = 7000n; // 70% of fee ETH thickens LP
 const DEAD = "0x000000000000000000000000000000000000dEaD";
+
+const CURVE_SUPPLY = (TOTAL * (10_000n - PLATFORM_SKIM_BPS)) / 10_000n;
+const SALE = (CURVE_SUPPLY * SALE_BPS_OF_CURVE) / 10_000n;
+const MIGRATION = CURVE_SUPPLY - SALE;
+const SKIM = TOTAL - CURVE_SUPPLY;
 
 async function deployAll() {
   const [deployer, alice, bob, fee] = await ethers.getSigners();
 
-  // full Uniswap v2 stack (stands in for the canonical RH Chain deployment)
   const WETH9 = await ethers.getContractFactory("WETH9");
   const weth = await WETH9.deploy();
   await weth.waitForDeployment();
@@ -29,42 +37,74 @@ async function deployAll() {
     await router.getAddress(),
     fee.address,
     TOTAL,
-    SALE,
     VETH,
     VTOKEN,
-    FEE_BPS
+    SALE_BPS_OF_CURVE,
+    PLATFORM_SKIM_BPS,
+    MAX_FEE_BPS,
+    MIN_FEE_BPS,
+    FEE_DECAY_STEP,
+    1n,
+    FEE_TO_LP_BPS
   );
   await launchpad.waitForDeployment();
 
   return { deployer, alice, bob, fee, weth, v2factory, router, launchpad };
 }
 
-async function createToken(launchpad: any, signer: any, value = 0n) {
+async function createToken(launchpad: any, signer: any) {
   const tx = await launchpad
     .connect(signer)
-    .createToken("Test", "TST", "desc", "img", "", "", "", { value });
-  await tx.wait();
-  const info = await launchpad.tokens(0);
-  return { token: info.token, curve: info.curve };
+    .createToken("Test", "TST", "img", "desc", "", "", "");
+  const receipt = await tx.wait();
+  const created = receipt!.logs
+    .map((l: any) => {
+      try {
+        return launchpad.interface.parseLog(l);
+      } catch {
+        return null;
+      }
+    })
+    .find((e: any) => e?.name === "TokenCreated");
+  return { token: created!.args.token, curve: created!.args.curve };
 }
 
-describe("LaunchpadV2 + BondingCurveV2 + Uniswap v2 graduation", () => {
-  it("creates a token seeded into its curve", async () => {
-    const { launchpad, alice } = await deployAll();
+describe("LaunchpadV2 fee model", () => {
+  it("skims 2% platform tokens to treasury on create", async () => {
+    const { launchpad, alice, fee } = await deployAll();
     const { token, curve } = await createToken(launchpad, alice);
 
     const Token = await ethers.getContractAt("Token", token);
     expect(await Token.totalSupply()).to.equal(TOTAL);
-    expect(await Token.balanceOf(curve)).to.equal(TOTAL);
-    expect(await launchpad.tokenCount()).to.equal(1n);
+    expect(await Token.balanceOf(fee.address)).to.equal(SKIM);
+    expect(await Token.balanceOf(curve)).to.equal(CURVE_SUPPLY);
+    expect(await launchpad.saleSupply()).to.equal(SALE);
+    expect(await launchpad.migrationSupply()).to.equal(MIGRATION);
   });
 
-  it("quotes and curve math match the V1 curve", async () => {
+  it("starts at 5% graduation fee and decays to 1% floor", async () => {
+    const { launchpad } = await deployAll();
+    expect(await launchpad.currentGraduationFeeBps()).to.equal(MAX_FEE_BPS);
+
+    // simulate 8 graduations → 500 - 8*50 = 100 bps
+    for (let i = 0; i < 8; i++) {
+      const { curve } = await createToken(launchpad, (await ethers.getSigners())[0]);
+      const Curve = await ethers.getContractAt("BondingCurveV2", curve);
+      const gradEth = await Curve.graduationEth();
+      const buyer = (await ethers.getSigners())[0];
+      await Curve.connect(buyer).buy(0, buyer.address, {
+        value: gradEth + ethers.parseEther("0.01"),
+      });
+    }
+    expect(await launchpad.graduationCount()).to.equal(8n);
+    expect(await launchpad.currentGraduationFeeBps()).to.equal(MIN_FEE_BPS);
+  });
+
+  it("quotes graduation ETH from virtual reserves", async () => {
     const { launchpad, alice } = await deployAll();
     const { curve } = await createToken(launchpad, alice);
     const Curve = await ethers.getContractAt("BondingCurveV2", curve);
 
-    // graduation target identical to V1: K/(Y0-sale) - X0
     const K = VETH * VTOKEN;
     const expected = K / (VTOKEN - SALE) - VETH;
     expect(await Curve.graduationEth()).to.equal(expected);
@@ -73,7 +113,7 @@ describe("LaunchpadV2 + BondingCurveV2 + Uniswap v2 graduation", () => {
     expect(tokensOut).to.be.gt(0n);
   });
 
-  it("enforces min-out slippage bounds on buy and sell", async () => {
+  it("enforces slippage bounds on buy and sell", async () => {
     const { launchpad, alice } = await deployAll();
     const { token, curve } = await createToken(launchpad, alice);
     const Curve = await ethers.getContractAt("BondingCurveV2", curve);
@@ -94,7 +134,7 @@ describe("LaunchpadV2 + BondingCurveV2 + Uniswap v2 graduation", () => {
     ).to.be.revertedWith("SLIPPAGE");
   });
 
-  it("graduates into a Uniswap v2 WETH/token pair with LP burned", async () => {
+  it("graduates with 70% fee to LP / 30% to treasury", async () => {
     const { launchpad, alice, fee, weth, v2factory } = await deployAll();
     const { token, curve } = await createToken(launchpad, alice);
     const Curve = await ethers.getContractAt("BondingCurveV2", curve);
@@ -103,34 +143,33 @@ describe("LaunchpadV2 + BondingCurveV2 + Uniswap v2 graduation", () => {
     const gradEth = await Curve.graduationEth();
     const feeBefore = await ethers.provider.getBalance(fee.address);
 
-    // overshoot; excess refunded
     await Curve.connect(alice).buy(0, alice.address, { value: gradEth + ethers.parseEther("1") });
 
     expect(await Curve.graduated()).to.equal(true);
 
-    // pair exists on the v2 factory and is recorded on the curve
     const pairAddr = await v2factory.getPair(token, await weth.getAddress());
     expect(pairAddr).to.not.equal(ethers.ZeroAddress);
     expect(await Curve.pair()).to.equal(pairAddr);
 
-    // migration tokens + raised ETH (minus fee) seeded as WETH
-    expect(await Token.balanceOf(pairAddr)).to.equal(TOTAL - SALE);
-    const expectedFee = (gradEth * FEE_BPS) / 10000n;
-    const WethAt = await ethers.getContractAt("WETH9", await weth.getAddress());
-    expect(await WethAt.balanceOf(pairAddr)).to.equal(gradEth - expectedFee);
+    const totalFee = (gradEth * MAX_FEE_BPS) / 10_000n;
+    const treasuryFee = totalFee - (totalFee * FEE_TO_LP_BPS) / 10_000n;
+    const ethLiquidity = gradEth - treasuryFee;
 
-    // LP locked at the dead address, fee paid to treasury
+    expect(await Token.balanceOf(pairAddr)).to.equal(MIGRATION);
+    const WethAt = await ethers.getContractAt("WETH9", await weth.getAddress());
+    expect(await WethAt.balanceOf(pairAddr)).to.equal(ethLiquidity);
+
     const Pair = await ethers.getContractAt("UniswapV2Pair", pairAddr);
     expect(await Pair.balanceOf(DEAD)).to.be.gt(0n);
-    expect(await ethers.provider.getBalance(fee.address)).to.equal(feeBefore + expectedFee);
+    expect(await ethers.provider.getBalance(fee.address)).to.equal(feeBefore + treasuryFee);
+    expect(await launchpad.graduationCount()).to.equal(1n);
 
-    // curve closed
     await expect(
       Curve.connect(alice).buy(0, alice.address, { value: ethers.parseEther("0.1") })
     ).to.be.revertedWith("GRADUATED");
   });
 
-  it("trades on the v2 router after graduation (the DEXScreener-visible path)", async () => {
+  it("trades on the v2 router after graduation", async () => {
     const { launchpad, alice, bob, weth, router } = await deployAll();
     const { token, curve } = await createToken(launchpad, alice);
     const Curve = await ethers.getContractAt("BondingCurveV2", curve);
@@ -142,7 +181,6 @@ describe("LaunchpadV2 + BondingCurveV2 + Uniswap v2 graduation", () => {
     const wethAddr = await weth.getAddress();
     const deadline = (await ethers.provider.getBlock("latest"))!.timestamp + 600;
 
-    // bob buys via the router (standard Uniswap v2 swap → Swap/Sync events)
     await router
       .connect(bob)
       .swapExactETHForTokens(0, [wethAddr, token], bob.address, deadline, {
@@ -151,18 +189,10 @@ describe("LaunchpadV2 + BondingCurveV2 + Uniswap v2 graduation", () => {
     const bobBal = await Token.balanceOf(bob.address);
     expect(bobBal).to.be.gt(0n);
 
-    // and sells back
     await Token.connect(bob).approve(await router.getAddress(), bobBal);
     await router
       .connect(bob)
       .swapExactTokensForETH(bobBal, 0, [token, wethAddr], bob.address, deadline + 600);
     expect(await Token.balanceOf(bob.address)).to.equal(0n);
-  });
-
-  it("supports a dev buy at creation", async () => {
-    const { launchpad, alice } = await deployAll();
-    const { token } = await createToken(launchpad, alice, ethers.parseEther("0.05"));
-    const Token = await ethers.getContractAt("Token", token);
-    expect(await Token.balanceOf(alice.address)).to.be.gt(0n);
   });
 });
