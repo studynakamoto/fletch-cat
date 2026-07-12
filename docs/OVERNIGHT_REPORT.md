@@ -128,4 +128,9 @@ cd backend && npm run build
 
 ## Git
 
-Commits pushed to `origin/main` on `studynakamoto/fletch-cat` after secret scan on staged files.
+Commit `65e22f5` on local `main`. Pushed to feature branch (main push requires approval):
+
+- **Branch:** `overnight/fee-model-v2-docs`
+- **PR:** https://github.com/studynakamoto/fletch-cat/pull/new/overnight/fee-model-v2-docs
+
+Merge to `main` when ready.
